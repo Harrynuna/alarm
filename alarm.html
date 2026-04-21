@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="アラーム">
+<title>日付指定アラーム</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+    background: #1c1c1e;
+    color: #fff;
+    min-height: 100vh;
+    padding-bottom: 80px;
+  }
+  header {
+    background: #1c1c1e;
+    padding: 56px 20px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    border-bottom: 1px solid #2c2c2e;
+  }
+  header h1 { font-size: 28px; font-weight: 700; }
+  #addBtn {
+    width: 36px; height: 36px;
+    background: #ff9f0a;
+    border: none; border-radius: 50%;
+    color: #fff; font-size: 22px;
+    cursor: pointer; display: flex;
+    align-items: center; justify-content: center;
+    font-weight: 300;
+  }
+
+  /* 音解除バナー */
+  #audioUnlockBanner {
+    background: #ff9f0a;
+    color: #000;
+    text-align: center;
+    padding: 12px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    display: none;
+  }
+  #audioUnlockBanner.show { display: block; }
+
+  #emptyState {
+    text-align: center;
+    padding: 80px 20px;
+    color: #636366;
+  }
+  #emptyState .icon { font-size: 60px; margin-bottom: 16px; }
+  #emptyState h2 { font-size: 20px; font-weight: 600; margin-bottom: 8px; color: #ebebf5; }
+  #emptyState p { font-size: 14px; line-height: 1.5; }
+
+  #alarmList { padding: 0 16px; }
+  .alarm-item {
+    background: #2c2c2e;
+    border-radius: 14px;
+    margin: 8px 0;
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.15s;
+    touch-action: pan-y;
+  }
+  .alarm-item.deleting { transform: translateX(-100%); transition: transform 0.3s; }
+  .alarm-info { flex: 1; min-width: 0; }
+  .alarm-name { font-size: 16px; font-weight: 600; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .alarm-time { font-size: 28px; font-weight: 200; letter-spacing: -0.5px; }
+  .alarm-date { font-size: 12px; color: #8e8e93; margin-top: 4px; }
+  .alarm-meta { font-size: 11px; color: #636366; margin-top: 2px; }
+  .alarm-toggle {
+    width: 51px; height: 31px;
+    background: #3a3a3c;
+    border-radius: 16px;
+    border: none;
+    cursor: pointer;
+    position: relative;
+    transition: background 0.2s;
+    flex-shrink: 0;
+  }
+  .alarm-toggle::after {
+    content: '';
+    position: absolute;
+    width: 27px; height: 27px;
+    background: #fff;
+    border-radius: 50%;
+    top: 2px; left: 2px;
+    transition: transform 0.2s;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  }
+  .alarm-toggle.on { background: #34c759; }
+  .alarm-toggle.on::after { transform: translateX(20px); }
+  .delete-hint {
+    font-size: 11px;
+    color: #636366;
+    text-align: right;
+    padding: 4px 16px 0;
+  }
+  .countdown-badge {
+    background: #ff9f0a22;
+    color: #ff9f0a;
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 10px;
+    margin-top: 4px;
+    display: inline-block;
+  }
+
+  /* モーダル */
+  #modal {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 200;
+    display: none;
+    align-items: flex-end;
+    padding: 0;
+  }
+  #modal.open { display: flex; }
+  #modalBox {
+    background: #1c1c1e;
+    border-radius: 20px 20px 0 0;
+    width: 100%;
+    max-height: 92vh;
+    overflow-y: auto;
+    padding: 20px 20px 40px;
+    animation: slideUp 0.3s ease;
+  }
+  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  #modalBox h2 { font-size: 20px; font-weight: 700; margin-bottom: 20px; text-align: center; }
+  .form-group { margin-bottom: 16px; }
+  .form-group label { display: block; font-size: 12px; color: #8e8e93; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .form-group input, .form-group select, .form-group textarea {
+    width: 100%;
+    background: #2c2c2e;
+    border: none;
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 16px;
+    color: #fff;
+    outline: none;
+    -webkit-appearance: none;
+  }
+  .form-group textarea { height: 80px; resize: none; }
+  .form-group select option { background: #2c2c2e; }
+  .modal-btns { display: flex; gap: 10px; margin-top: 20px; }
+  .modal-btns button {
+    flex: 1; padding: 14px;
+    border: none; border-radius: 12px;
+    font-size: 16px; font-weight: 600;
+    cursor: pointer;
+  }
+  #cancelBtn { background: #2c2c2e; color: #fff; }
+  #saveBtn { background: #ff9f0a; color: #000; }
+
+  /* 鳴動中モーダル */
+  #ringModal {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.9);
+    z-index: 300;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 40px;
+  }
+  #ringModal.open { display: flex; }
+  #ringModal .ring-icon { font-size: 80px; animation: ringPulse 0.5s infinite alternate; }
+  @keyframes ringPulse { from { transform: scale(1) rotate(-5deg); } to { transform: scale(1.1) rotate(5deg); } }
+  #ringModal h2 { font-size: 28px; font-weight: 700; margin: 20px 0 8px; }
+  #ringModal .ring-time { font-size: 48px; font-weight: 200; }
+  #ringModal .ring-memo { font-size: 16px; color: #8e8e93; margin-top: 12px; }
+  #stopBtn {
+    margin-top: 40px;
+    background: #ff3b30;
+    color: #fff;
+    border: none;
+    border-radius: 50px;
+    padding: 18px 60px;
+    font-size: 20px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  #snoozeBtn {
+    margin-top: 12px;
+    background: #2c2c2e;
+    color: #fff;
+    border: none;
+    border-radius: 50px;
+    padding: 14px 40px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+<div id="audioUnlockBanner" class="show" onclick="unlockAudio()">
+  🔔 タップして音を有効にする
+</div>
+
+<header>
+  <h1>⏰ アラーム</h1>
+  <button id="addBtn" onclick="openModal()">＋</button>
+</header>
+
+<div id="emptyState">
+  <div class="icon">🔕</div>
+  <h2>アラームがありません</h2>
+  <p>右上の ＋ ボタンを押して<br>日付指定のアラームを追加しましょう</p>
+</div>
+
+<div id="alarmList"></div>
+
+<!-- 追加モーダル -->
+<div id="modal">
+  <div id="modalBox">
+    <h2 id="modalTitle">アラームを追加</h2>
+    <div class="form-group">
+      <label>アラーム名</label>
+      <input type="text" id="nameInput" placeholder="例：薬を飲む" maxlength="30">
+    </div>
+    <div class="form-group">
+      <label>日付</label>
+      <input type="date" id="dateInput">
+    </div>
+    <div class="form-group">
+      <label>時刻</label>
+      <input type="time" id="timeInput">
+    </div>
+    <div class="form-group">
+      <label>くり返し</label>
+      <select id="repeatInput">
+        <option value="none">なし</option>
+        <option value="daily">毎日</option>
+        <option value="weekly">毎週</option>
+        <option value="monthly">毎月</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>サウンド</label>
+      <select id="soundInput">
+        <option value="bell">ベル 🔔</option>
+        <option value="digital">デジタル 📱</option>
+        <option value="chime">チャイム 🎵</option>
+        <option value="gentle">やさしい音 🎶</option>
+        <option value="urgent">緊急 🚨</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>メモ（任意）</label>
+      <textarea id="memoInput" placeholder="メモを入力..."></textarea>
+    </div>
+    <div class="modal-btns">
+      <button id="cancelBtn" onclick="closeModal()">キャンセル</button>
+      <button id="saveBtn" onclick="saveAlarm()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 鳴動モーダル -->
+<div id="ringModal">
+  <div class="ring-icon">🔔</div>
+  <h2 id="ringName">アラーム</h2>
+  <div class="ring-time" id="ringTime"></div>
+  <div class="ring-memo" id="ringMemo"></div>
+  <button id="stopBtn" onclick="stopAlarm()">止める</button>
+  <button id="snoozeBtn" onclick="snoozeAlarm()">5分後にもう一度</button>
+</div>
+
+<script>
+let alarms = JSON.parse(localStorage.getItem('alarms') || '[]');
+let audioCtx = null;
+let ringInterval = null;
+let soundInterval = null;
+let editingId = null;
+let audioUnlocked = false;
+let currentRingingAlarm = null;
+let touchStartX = 0;
+let touchStartY = 0;
+
+// iOS音声解除
+function unlockAudio() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume().then(() => {
+      audioUnlocked = true;
+      document.getElementById('audioUnlockBanner').classList.remove('show');
+      playTestBeep();
+    });
+  } else {
+    audioUnlocked = true;
+    document.getElementById('audioUnlockBanner').classList.remove('show');
+    playTestBeep();
+  }
+}
+
+function playTestBeep() {
+  if (!audioCtx) return;
+  try {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.2);
+  } catch(e) {}
+}
+
+function getAudioCtx() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+  return audioCtx;
+}
+
+function playSound(type) {
+  try {
+    const ctx = getAudioCtx();
+    const now = ctx.currentTime;
+
+    if (type === 'bell') {
+      [0, 0.15, 0.3].forEach(t => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.type = 'sine';
+        o.frequency.setValueAtTime(987, now + t);
+        o.frequency.exponentialRampToValueAtTime(500, now + t + 0.4);
+        g.gain.setValueAtTime(0.4, now + t);
+        g.gain.exponentialRampToValueAtTime(0.001, now + t + 0.5);
+        o.start(now + t); o.stop(now + t + 0.5);
+      });
+    } else if (type === 'digital') {
+      [0, 0.2, 0.4, 0.6].forEach((t, i) => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.type = 'square';
+        o.frequency.value = i % 2 === 0 ? 1047 : 1319;
+        g.gain.setValueAtTime(0.2, now + t);
+        g.gain.setValueAtTime(0.001, now + t + 0.15);
+        o.start(now + t); o.stop(now + t + 0.15);
+      });
+    } else if (type === 'chime') {
+      [523, 659, 784, 1047].forEach((freq, i) => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.type = 'sine';
+        o.frequency.value = freq;
+        g.gain.setValueAtTime(0, now + i * 0.2);
+        g.gain.linearRampToValueAtTime(0.3, now + i * 0.2 + 0.05);
+        g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.2 + 0.6);
+        o.start(now + i * 0.2); o.stop(now + i * 0.2 + 0.6);
+      });
+    } else if (type === 'gentle') {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.type = 'sine';
+      o.frequency.setValueAtTime(440, now);
+      o.frequency.linearRampToValueAtTime(880, now + 0.5);
+      g.gain.setValueAtTime(0, now);
+      g.gain.linearRampToValueAtTime(0.25, now + 0.1);
+      g.gain.linearRampToValueAtTime(0.25, now + 0.4);
+      g.gain.linearRampToValueAtTime(0, now + 0.6);
+      o.start(now); o.stop(now + 0.6);
+    } else if (type === 'urgent') {
+      for (let i = 0; i < 6; i++) {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.type = 'sawtooth';
+        o.frequency.value = i % 2 === 0 ? 880 : 1100;
+        g.gain.setValueAtTime(0.3, now + i * 0.1);
+        g.gain.setValueAtTime(0.001, now + i * 0.1 + 0.08);
+        o.start(now + i * 0.1); o.stop(now + i * 0.1 + 0.08);
+      }
+    }
+  } catch(e) {
+    console.log('音声エラー:', e);
+  }
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr + 'T00:00:00');
+  const days = ['日','月','火','水','木','金','土'];
+  return `${d.getMonth()+1}月${d.getDate()}日（${days[d.getDay()]}）`;
+}
+
+function formatRepeat(r) {
+  return { none:'くり返しなし', daily:'毎日', weekly:'毎週', monthly:'毎月' }[r] || '';
+}
+
+function getCountdown(alarm) {
+  const now = new Date();
+  const target = new Date(alarm.date + 'T' + alarm.time);
+  if (isNaN(target)) return '';
+  const diff = target - now;
+  if (diff < 0) return '⏰ 過去のアラーム';
+  const h = Math.floor(diff / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  if (h > 24) {
+    const days = Math.floor(h / 24);
+    return `あと${days}日`;
+  }
+  if (h > 0) return `あと${h}時間${m}分`;
+  if (m > 0) return `あと${m}分`;
+  return 'まもなく！';
+}
+
+function saveData() {
+  localStorage.setItem('alarms', JSON.stringify(alarms));
+}
+
+function renderAlarms() {
+  const list = document.getElementById('alarmList');
+  const empty = document.getElementById('emptyState');
+  if (alarms.length === 0) {
+    empty.style.display = 'block';
+    list.innerHTML = '';
+    return;
+  }
+  empty.style.display = 'none';
+  list.innerHTML = alarms.map(a => `
+    <div class="alarm-item" id="alarm-${a.id}"
+      ontouchstart="touchStart(event, '${a.id}')"
+      ontouchmove="touchMove(event, '${a.id}')"
+      ontouchend="touchEnd(event, '${a.id}')"
+      onclick="editAlarm('${a.id}')">
+      <div class="alarm-info">
+        <div class="alarm-name">${a.name || 'アラーム'}</div>
+        <div class="alarm-time">${a.time}</div>
+        <div class="alarm-date">${formatDate(a.date)} ・ ${formatRepeat(a.repeat)}</div>
+        ${a.memo ? `<div class="alarm-meta">📝 ${a.memo}</div>` : ''}
+        <span class="countdown-badge">${getCountdown(a)}</span>
+      </div>
+      <button class="alarm-toggle ${a.enabled ? 'on' : ''}"
+        onclick="event.stopPropagation(); toggleAlarm('${a.id}')"></button>
+    </div>
+  `).join('') + (alarms.length > 0 ? '<div class="delete-hint">← スワイプで削除</div>' : '');
+}
+
+function touchStart(e, id) {
+  touchStartX = e.touches[0].clientX;
+  touchStartY = e.touches[0].clientY;
+}
+function touchMove(e, id) {
+  const dx = e.touches[0].clientX - touchStartX;
+  const dy = e.touches[0].clientY - touchStartY;
+  if (Math.abs(dx) > Math.abs(dy) && dx < -30) {
+    const el = document.getElementById('alarm-' + id);
+    if (el) el.style.transform = `translateX(${Math.max(dx, -100)}px)`;
+  }
+}
+function touchEnd(e, id) {
+  const dx = e.changedTouches[0].clientX - touchStartX;
+  const el = document.getElementById('alarm-' + id);
+  if (dx < -80) {
+    if (el) el.classList.add('deleting');
+    setTimeout(() => deleteAlarm(id), 300);
+  } else {
+    if (el) el.style.transform = '';
+  }
+}
+
+function deleteAlarm(id) {
+  alarms = alarms.filter(a => a.id !== id);
+  saveData();
+  renderAlarms();
+}
+
+function toggleAlarm(id) {
+  const a = alarms.find(x => x.id === id);
+  if (a) { a.enabled = !a.enabled; saveData(); renderAlarms(); }
+}
+
+function editAlarm(id) {
+  const a = alarms.find(x => x.id === id);
+  if (!a) return;
+  editingId = id;
+  document.getElementById('modalTitle').textContent = 'アラームを編集';
+  document.getElementById('nameInput').value = a.name;
+  document.getElementById('dateInput').value = a.date;
+  document.getElementById('timeInput').value = a.time;
+  document.getElementById('repeatInput').value = a.repeat;
+  document.getElementById('soundInput').value = a.sound;
+  document.getElementById('memoInput').value = a.memo;
+  document.getElementById('modal').classList.add('open');
+}
+
+function openModal() {
+  editingId = null;
+  document.getElementById('modalTitle').textContent = 'アラームを追加';
+  document.getElementById('nameInput').value = '';
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  document.getElementById('dateInput').value = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+  document.getElementById('timeInput').value = `${pad(now.getHours())}-${pad(now.getMinutes())}`.replace('-', ':');
+  document.getElementById('repeatInput').value = 'none';
+  document.getElementById('soundInput').value = 'bell';
+  document.getElementById('memoInput').value = '';
+  document.getElementById('modal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('open');
+  editingId = null;
+}
+
+function saveAlarm() {
+  const name = document.getElementById('nameInput').value || 'アラーム';
+  const date = document.getElementById('dateInput').value;
+  const time = document.getElementById('timeInput').value;
+  const repeat = document.getElementById('repeatInput').value;
+  const sound = document.getElementById('soundInput').value;
+  const memo = document.getElementById('memoInput').value;
+  if (!date || !time) { alert('日付と時刻を入力してください'); return; }
+
+  if (editingId) {
+    const idx = alarms.findIndex(a => a.id === editingId);
+    if (idx >= 0) alarms[idx] = { ...alarms[idx], name, date, time, repeat, sound, memo };
+  } else {
+    alarms.push({ id: Date.now().toString(), name, date, time, repeat, sound, memo, enabled: true });
+  }
+  saveData();
+  renderAlarms();
+  closeModal();
+}
+
+function checkAlarms() {
+  if (!audioUnlocked) return;
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const nowDateStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+  const nowTimeStr = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  const nowSec = now.getSeconds();
+
+  alarms.forEach(a => {
+    if (!a.enabled) return;
+    if (nowSec !== 0 && nowSec !== 1) return;
+
+    let shouldRing = false;
+    if (a.repeat === 'none' && a.date === nowDateStr && a.time === nowTimeStr) shouldRing = true;
+    if (a.repeat === 'daily' && a.time === nowTimeStr) shouldRing = true;
+    if (a.repeat === 'weekly') {
+      const alarmDay = new Date(a.date + 'T00:00:00').getDay();
+      if (now.getDay() === alarmDay && a.time === nowTimeStr) shouldRing = true;
+    }
+    if (a.repeat === 'monthly') {
+      const alarmDay = new Date(a.date + 'T00:00:00').getDate();
+      if (now.getDate() === alarmDay && a.time === nowTimeStr) shouldRing = true;
+    }
+
+    if (shouldRing && !currentRingingAlarm) {
+      startRinging(a);
+    }
+  });
+}
+
+function startRinging(alarm) {
+  currentRingingAlarm = alarm;
+  document.getElementById('ringName').textContent = alarm.name || 'アラーム';
+  document.getElementById('ringTime').textContent = alarm.time;
+  document.getElementById('ringMemo').textContent = alarm.memo || '';
+  document.getElementById('ringModal').classList.add('open');
+
+  playSound(alarm.sound || 'bell');
+  soundInterval = setInterval(() => playSound(alarm.sound || 'bell'), 2000);
+
+  if (alarm.repeat === 'none') {
+    alarm.enabled = false;
+    saveData();
+    renderAlarms();
+  }
+}
+
+function stopAlarm() {
+  if (soundInterval) { clearInterval(soundInterval); soundInterval = null; }
+  document.getElementById('ringModal').classList.remove('open');
+  currentRingingAlarm = null;
+}
+
+function snoozeAlarm() {
+  if (!currentRingingAlarm) return;
+  const a = currentRingingAlarm;
+  stopAlarm();
+
+  const snoozeTime = new Date(Date.now() + 5 * 60 * 1000);
+  const pad = n => String(n).padStart(2, '0');
+  const newAlarm = {
+    id: Date.now().toString(),
+    name: a.name + '（スヌーズ）',
+    date: `${snoozeTime.getFullYear()}-${pad(snoozeTime.getMonth()+1)}-${pad(snoozeTime.getDate())}`,
+    time: `${pad(snoozeTime.getHours())}:${pad(snoozeTime.getMinutes())}`,
+    repeat: 'none',
+    sound: a.sound,
+    memo: a.memo,
+    enabled: true
+  };
+  alarms.push(newAlarm);
+  saveData();
+  renderAlarms();
+}
+
+setInterval(() => {
+  document.querySelectorAll('.countdown-badge').forEach((el, i) => {
+    if (alarms[i]) el.textContent = getCountdown(alarms[i]);
+  });
+  checkAlarms();
+}, 1000);
+
+document.addEventListener('touchstart', function() {
+  if (!audioUnlocked) {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume().then(() => { audioUnlocked = true; });
+    } else {
+      audioUnlocked = true;
+    }
+  }
+}, { once: false, passive: true });
+
+document.getElementById('modal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+renderAlarms();
+</script>
+</body>
+</html>
